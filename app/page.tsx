@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -65,6 +64,14 @@ const CATEGORIES = [
   "Lainnya",
 ];
 
+const TEAM_MEMBERS = [
+  { name: "Ayessya Fatma Nandira", nim: "J0414261005" },
+  { name: "Ilyas Mufid", nim: "J0414261024" },
+  { name: "Rayya Syiffa Dewanti", nim: "J0414261138" },
+  { name: "Olivia Dameria Panjaitan", nim: "J0414261175" },
+  { name: "Muhammad Fakhri Ramadhan", nim: "J0414261295" },
+];
+
 const money = (amount: number) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -84,12 +91,18 @@ function normalizeWhatsApp(value: string) {
   return number;
 }
 
-function makeOrderItem(): OrderItem {
+// ID awal bersifat tetap agar aman saat prerender.
+// ID unik dibuat hanya ketika pengguna menambah baris pesanan.
+function makeOrderItem(id = "order-item-initial"): OrderItem {
   return {
-    id: crypto.randomUUID(),
+    id,
     variant: "",
     quantity: 1,
   };
+}
+
+function createUniqueId() {
+  return crypto.randomUUID();
 }
 
 export default function Home() {
@@ -106,13 +119,16 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState("Semua");
 
   const [showSellerForm, setShowSellerForm] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productForm, setProductForm] = useState<ProductForm>(EMPTY_FORM);
+  const [editingProduct, setEditingProduct] =
+    useState<Product | null>(null);
+  const [productForm, setProductForm] =
+    useState<ProductForm>(EMPTY_FORM);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [currentImageUrl, setCurrentImageUrl] = useState("");
 
   const [showOrder, setShowOrder] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedProduct, setSelectedProduct] =
+    useState<Product | null>(null);
   const [buyerName, setBuyerName] = useState("");
   const [buyerNote, setBuyerNote] = useState("");
   const [orderItems, setOrderItems] = useState<OrderItem[]>([
@@ -147,19 +163,26 @@ export default function Home() {
     async function initialize() {
       setLoading(true);
 
-      const { data, error } = await supabase.auth.getSession();
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (error) {
-        console.error("Get session error:", error);
+        if (error) {
+          console.error("Get session error:", error);
+        }
+
+        setUser(data.session?.user ?? null);
+
+        await fetchProducts();
+      } catch (error) {
+        console.error("Initialization error:", error);
+        if (mounted) {
+          setPageError("Terjadi kesalahan saat memuat VokasiMart.");
+        }
+      } finally {
+        if (mounted) setLoading(false);
       }
-
-      setUser(data.session?.user ?? null);
-
-      await fetchProducts();
-
-      if (mounted) setLoading(false);
     }
 
     void initialize();
@@ -197,16 +220,26 @@ export default function Home() {
     });
   }, [products, search, activeCategory]);
 
-  const totalOrder = useMemo(() => {
-    return orderItems.reduce(
-      (total, item) =>
-        total + Math.max(0, Number(item.quantity) || 0) *
-          (selectedProduct?.price ?? 0),
-      0
-    );
-  }, [orderItems, selectedProduct]);
+  const totalOrder = useMemo(
+    () =>
+      orderItems.reduce(
+        (total, item) =>
+          total +
+          Math.max(0, Number(item.quantity) || 0) *
+            (Number(selectedProduct?.price) || 0),
+        0
+      ),
+    [orderItems, selectedProduct]
+  );
+
+  function clearMessages() {
+    setPageError("");
+    setNotice("");
+  }
 
   async function handleLogout() {
+    clearMessages();
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -234,8 +267,7 @@ export default function Home() {
     setSelectedImage(null);
     setCurrentImageUrl("");
     setShowSellerForm(true);
-    setPageError("");
-    setNotice("");
+    clearMessages();
   }
 
   function openEditProduct(product: Product) {
@@ -258,8 +290,8 @@ export default function Home() {
     setCurrentImageUrl(product.image_url ?? "");
     setSelectedImage(null);
     setShowSellerForm(true);
-    setPageError("");
-    setNotice("");
+    clearMessages();
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -288,10 +320,15 @@ export default function Home() {
   }
 
   async function uploadProductImage(): Promise<string | null> {
-    if (!selectedImage || !user) return currentImageUrl || null;
+    if (!selectedImage || !user) {
+      return currentImageUrl || null;
+    }
 
-    const extension = selectedImage.name.split(".").pop() || "jpg";
-    const path = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    const extension =
+      selectedImage.name.split(".").pop() || "jpg";
+
+    const path =
+      `${user.id}/${Date.now()}-${createUniqueId()}.${extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from("product-images")
@@ -314,10 +351,11 @@ export default function Home() {
     return data.publicUrl;
   }
 
-  async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveProduct(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
-    setPageError("");
-    setNotice("");
+    clearMessages();
 
     if (!user) {
       router.push("/auth");
@@ -331,7 +369,11 @@ export default function Home() {
       return;
     }
 
-    if (!Number.isFinite(price) || price < 0) {
+    if (
+      productForm.price.trim() === "" ||
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
       setPageError("Harga produk harus berupa angka yang valid.");
       return;
     }
@@ -341,7 +383,11 @@ export default function Home() {
       return;
     }
 
-    if (!productForm.whatsapp_number.trim()) {
+    const whatsapp = normalizeWhatsApp(
+      productForm.whatsapp_number
+    );
+
+    if (!whatsapp) {
       setPageError("Nomor WhatsApp penjual wajib diisi.");
       return;
     }
@@ -357,9 +403,7 @@ export default function Home() {
         price,
         seller: productForm.seller.trim(),
         description: productForm.description.trim() || null,
-        whatsapp_number: normalizeWhatsApp(
-          productForm.whatsapp_number
-        ),
+        whatsapp_number: whatsapp,
         emoji: productForm.emoji.trim() || "🛍️",
         color: productForm.color || "#edf5ec",
         image_url: imageUrl,
@@ -367,13 +411,20 @@ export default function Home() {
       };
 
       if (editingProduct) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("products")
           .update(payload)
           .eq("id", editingProduct.id)
-          .eq("owner_id", user.id);
+          .eq("owner_id", user.id)
+          .select("id");
 
         if (error) throw error;
+
+        if (!data || data.length === 0) {
+          throw new Error(
+            "Produk tidak berhasil diperbarui. Pastikan kamu adalah pemilik produk tersebut."
+          );
+        }
 
         setNotice("Produk berhasil diperbarui.");
       } else {
@@ -417,26 +468,38 @@ export default function Home() {
     if (!confirmed) return;
 
     setDeletingId(product.id);
-    setPageError("");
-    setNotice("");
+    clearMessages();
 
-    const { error } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", product.id)
-      .eq("owner_id", user.id);
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", product.id)
+        .eq("owner_id", user.id)
+        .select("id");
 
-    setDeletingId(null);
+      if (error) throw error;
 
-    if (error) {
-      setPageError("Produk gagal dihapus: " + error.message);
-      return;
+      if (!data || data.length === 0) {
+        throw new Error(
+          "Produk tidak terhapus. Periksa izin hapus dan kepemilikan produk."
+        );
+      }
+
+      setProducts((current) =>
+        current.filter((item) => item.id !== product.id)
+      );
+
+      setNotice("Produk berhasil dihapus.");
+    } catch (error: any) {
+      console.error("Delete product error:", error);
+      setPageError(
+        "Produk gagal dihapus: " +
+          (error?.message ?? "Terjadi kesalahan.")
+      );
+    } finally {
+      setDeletingId(null);
     }
-
-    setProducts((current) =>
-      current.filter((item) => item.id !== product.id)
-    );
-    setNotice("Produk berhasil dihapus.");
   }
 
   function openOrder(product: Product) {
@@ -445,7 +508,15 @@ export default function Home() {
     setBuyerNote("");
     setOrderItems([makeOrderItem()]);
     setShowOrder(true);
-    setPageError("");
+    clearMessages();
+  }
+
+  function addOrderItem() {
+    // Fungsi ini hanya dipanggil oleh klik pengguna di browser.
+    setOrderItems((current) => [
+      ...current,
+      makeOrderItem(createUniqueId()),
+    ]);
   }
 
   function updateOrderItem(
@@ -468,8 +539,11 @@ export default function Home() {
     );
   }
 
-  function handleWhatsAppOrder(event: FormEvent<HTMLFormElement>) {
+  function handleWhatsAppOrder(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+    clearMessages();
 
     if (!selectedProduct) return;
 
@@ -488,8 +562,12 @@ export default function Home() {
     }
 
     if (
+      orderItems.length === 0 ||
       orderItems.some(
-        (item) => !item.variant.trim() || item.quantity < 1
+        (item) =>
+          !item.variant.trim() ||
+          !Number.isFinite(item.quantity) ||
+          item.quantity < 1
       )
     ) {
       setPageError(
@@ -499,7 +577,8 @@ export default function Home() {
     }
 
     const lines = orderItems.map((item, index) => {
-      const subtotal = item.quantity * selectedProduct.price;
+      const subtotal =
+        item.quantity * (Number(selectedProduct.price) || 0);
 
       return (
         `${index + 1}. ${selectedProduct.name} — ${item.variant.trim()}\n` +
@@ -527,20 +606,18 @@ export default function Home() {
       .filter(Boolean)
       .join("\n");
 
-    const url = `https://wa.me/${whatsapp}?text=${encodeURIComponent(
-      message
-    )}`;
+    const url =
+      `https://wa.me/${whatsapp}?text=${encodeURIComponent(message)}`;
 
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  const teamMembers = [
-    { name: "Ayessya Fatma Nandira", nim: "J0414261005" },
-    { name: "Ilyas Mufid", nim: "J0414261024" },
-    { name: "Rayya Syiffa Dewanti", nim: "J0414261138" },
-    { name: "Olivia Dameria Panjaitan", nim: "J0414261175" },
-    { name: "Muhammad Fakhri Ramadhan", nim: "J0414261295" },
-  ];
+  function closeSellerForm() {
+    setShowSellerForm(false);
+    setEditingProduct(null);
+    setSelectedImage(null);
+    setPageError("");
+  }
 
   return (
     <main className="min-h-screen bg-[#f7f9f5] text-gray-800">
@@ -549,7 +626,9 @@ export default function Home() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <button
             type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            onClick={() =>
+              window.scrollTo({ top: 0, behavior: "smooth" })
+            }
             className="text-2xl font-black tracking-tight text-[#176b45]"
           >
             vokasi<span className="text-[#e9a23b]">mart.</span>
@@ -702,6 +781,7 @@ export default function Home() {
                 Satu tempat untuk mengenal produk, mendukung usaha
                 mahasiswa, dan memulai transaksi langsung dengan penjual.
               </p>
+
               <div className="mt-7 grid grid-cols-3 gap-3">
                 {[
                   ["🛍️", "Produk"],
@@ -750,7 +830,7 @@ export default function Home() {
           </button>
         </div>
 
-        {/* PENCARIAN */}
+        {/* PENCARIAN DAN KATEGORI */}
         <div className="mt-8 flex flex-col gap-4 md:flex-row">
           <div className="relative flex-1">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
@@ -802,12 +882,7 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowSellerForm(false);
-                  setEditingProduct(null);
-                  setSelectedImage(null);
-                  setPageError("");
-                }}
+                onClick={closeSellerForm}
                 className="rounded-full border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
               >
                 Tutup ✕
@@ -825,8 +900,11 @@ export default function Home() {
                 <input
                   required
                   value={productForm.name}
-                  onChange={(e) =>
-                    setProductForm({ ...productForm, name: e.target.value })
+                  onChange={(event) =>
+                    setProductForm({
+                      ...productForm,
+                      name: event.target.value,
+                    })
                   }
                   placeholder="Contoh: Brownies Cokelat"
                   className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#218653]"
@@ -839,21 +917,21 @@ export default function Home() {
                 </label>
                 <select
                   value={productForm.category}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setProductForm({
                       ...productForm,
-                      category: e.target.value,
+                      category: event.target.value,
                     })
                   }
                   className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#218653]"
                 >
-                  {CATEGORIES.filter((item) => item !== "Semua").map(
-                    (category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    )
-                  )}
+                  {CATEGORIES.filter(
+                    (category) => category !== "Semua"
+                  ).map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -866,8 +944,11 @@ export default function Home() {
                   min="0"
                   type="number"
                   value={productForm.price}
-                  onChange={(e) =>
-                    setProductForm({ ...productForm, price: e.target.value })
+                  onChange={(event) =>
+                    setProductForm({
+                      ...productForm,
+                      price: event.target.value,
+                    })
                   }
                   placeholder="15000"
                   className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#218653]"
@@ -881,8 +962,11 @@ export default function Home() {
                 <input
                   required
                   value={productForm.seller}
-                  onChange={(e) =>
-                    setProductForm({ ...productForm, seller: e.target.value })
+                  onChange={(event) =>
+                    setProductForm({
+                      ...productForm,
+                      seller: event.target.value,
+                    })
                   }
                   placeholder="Nama atau nama usaha"
                   className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#218653]"
@@ -897,10 +981,10 @@ export default function Home() {
                   required
                   type="tel"
                   value={productForm.whatsapp_number}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setProductForm({
                       ...productForm,
-                      whatsapp_number: e.target.value,
+                      whatsapp_number: event.target.value,
                     })
                   }
                   placeholder="08xxxxxxxxxx atau 628xxxxxxxxxx"
@@ -917,8 +1001,11 @@ export default function Home() {
                 </label>
                 <input
                   value={productForm.emoji}
-                  onChange={(e) =>
-                    setProductForm({ ...productForm, emoji: e.target.value })
+                  onChange={(event) =>
+                    setProductForm({
+                      ...productForm,
+                      emoji: event.target.value,
+                    })
                   }
                   placeholder="🛍️"
                   className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#218653]"
@@ -932,10 +1019,10 @@ export default function Home() {
                 <textarea
                   rows={4}
                   value={productForm.description}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setProductForm({
                       ...productForm,
-                      description: e.target.value,
+                      description: event.target.value,
                     })
                   }
                   placeholder="Jelaskan produk, ukuran, rasa, atau informasi penting lainnya..."
@@ -986,11 +1073,7 @@ export default function Home() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowSellerForm(false);
-                    setEditingProduct(null);
-                    setSelectedImage(null);
-                  }}
+                  onClick={closeSellerForm}
                   className="rounded-full border border-gray-200 px-6 py-3 font-bold text-gray-600 hover:bg-gray-50"
                 >
                   Batal
@@ -1129,7 +1212,9 @@ export default function Home() {
                           <button
                             type="button"
                             disabled={deletingId === product.id}
-                            onClick={() => void handleDeleteProduct(product)}
+                            onClick={() =>
+                              void handleDeleteProduct(product)
+                            }
                             className="rounded-xl border border-red-200 px-3 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
                           >
                             {deletingId === product.id
@@ -1202,8 +1287,8 @@ export default function Home() {
           </div>
 
           <p className="text-xs text-gray-400">
-            © {new Date().getFullYear()} VokasiMart.
-          </p>
+  © 2026 VokasiMart.
+</p>
         </div>
       </footer>
 
@@ -1357,7 +1442,7 @@ export default function Home() {
                 </p>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {teamMembers.map((member) => (
+                  {TEAM_MEMBERS.map((member) => (
                     <div
                       key={member.nim}
                       className="flex items-start gap-3 rounded-2xl border border-gray-100 bg-[#fafcf9] p-4"
@@ -1444,7 +1529,10 @@ export default function Home() {
               </button>
             </div>
 
-            <form onSubmit={handleWhatsAppOrder} className="space-y-6 p-6">
+            <form
+              onSubmit={handleWhatsAppOrder}
+              className="space-y-6 p-6"
+            >
               <div>
                 <label className="mb-2 block text-sm font-bold">
                   Nama Pembeli *
@@ -1463,12 +1551,7 @@ export default function Home() {
                   <h3 className="font-black">Varian dan Jumlah</h3>
                   <button
                     type="button"
-                    onClick={() =>
-                      setOrderItems((current) => [
-                        ...current,
-                        makeOrderItem(),
-                      ])
-                    }
+                    onClick={addOrderItem}
                     className="text-sm font-bold text-[#176b45] hover:underline"
                   >
                     + Tambah varian
@@ -1491,6 +1574,7 @@ export default function Home() {
                         <p className="text-sm font-bold">
                           Varian {index + 1}
                         </p>
+
                         {orderItems.length > 1 && (
                           <button
                             type="button"
