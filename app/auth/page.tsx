@@ -11,7 +11,7 @@ type Mode = "login" | "signup" | "forgot" | "reset";
 export default function AuthPage() {
   const router = useRouter();
 
-  const role: Role = "seller";
+  const role = "seller" as Role;
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
