@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -11,7 +11,7 @@ type Mode = "login" | "signup" | "forgot" | "reset";
 export default function AuthPage() {
   const router = useRouter();
 
-  const [role, setRole] = useState<Role>("buyer");
+  const role: Role = "seller";
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,6 +19,10 @@ export default function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+const [showPolicy, setShowPolicy] = useState(false);
+const [policyReadToEnd, setPolicyReadToEnd] = useState(false);
+const policyContentRef = useRef<HTMLDivElement>(null);
 
   // Deteksi ketika pengguna membuka tautan pemulihan password.
   useEffect(() => {
@@ -36,6 +40,34 @@ export default function AuthPage() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const sellerPolicy = [
+  {
+    title: "1. Kejujuran Informasi Produk",
+    description:
+      "Penjual wajib memberikan informasi, harga, foto, dan kondisi produk secara jujur dan sesuai dengan keadaan sebenarnya.",
+  },
+  {
+    title: "2. Tanggung Jawab Penjual",
+    description:
+      "Penjual bertanggung jawab atas produk atau jasa yang ditawarkan serta wajib berkomunikasi dengan pembeli secara sopan dan bertanggung jawab.",
+  },
+  {
+    title: "3. Larangan Produk",
+    description:
+      "Penjual dilarang menawarkan produk atau jasa ilegal, berbahaya, menipu, atau melanggar peraturan yang berlaku.",
+  },
+  {
+    title: "4. Pembaruan Informasi",
+    description:
+      "Penjual wajib memperbarui informasi produk dan menghapus atau menandai produk yang sudah tidak tersedia.",
+  },
+  {
+    title: "5. Penanganan Pelanggaran",
+    description:
+      "VokasiMart dapat meninjau, menyembunyikan, atau membatasi produk dan akun yang melanggar kebijakan sesuai ketentuan yang berlaku.",
+  },
+];
+
   function clearFeedback() {
     setError("");
     setMessage("");
@@ -52,6 +84,14 @@ export default function AuthPage() {
     e.preventDefault();
 
     if (busy) return;
+    
+    if (
+  (mode === "login" || mode === "signup") &&
+  !policyAccepted
+) {
+  setError("Silakan baca dan setujui Kebijakan Penjual VokasiMart terlebih dahulu.");
+  return;
+}
 
     setBusy(true);
     clearFeedback();
@@ -136,23 +176,26 @@ export default function AuthPage() {
     }
   }
 
-  const title =
-    mode === "signup"
-      ? "Buat akun VokasiMart"
-      : mode === "forgot"
-        ? "Lupa password?"
-        : mode === "reset"
-          ? "Buat password baru"
-          : "Selamat datang!";
+  
+const title =
+  mode === "signup"
+    ? "Daftar akun penjual"
+    : mode === "forgot"
+      ? "Lupa password?"
+      : mode === "reset"
+        ? "Buat password baru"
+        : "Masuk sebagai Penjual";
 
-  const subtitle =
-    mode === "signup"
-      ? "Daftar dan mulai gunakan VokasiMart."
-      : mode === "forgot"
-        ? "Masukkan email akunmu untuk menerima tautan pemulihan."
-        : mode === "reset"
-          ? "Gunakan password baru yang kuat dan mudah kamu ingat."
-          : "Masuk untuk melanjutkan aktivitasmu.";
+
+const subtitle =
+  mode === "signup"
+    ? "Buat akun penjual untuk mulai berjualan di VokasiMart."
+    : mode === "forgot"
+      ? "Masukkan email akun penjualmu untuk menerima tautan pemulihan."
+      : mode === "reset"
+        ? "Gunakan password baru yang kuat dan mudah kamu ingat."
+        : "Masuk ke akun penjual untuk mengelola produkmu.";
+
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-10">
@@ -405,7 +448,7 @@ export default function AuthPage() {
         </section>
 
         {/* Panel formulir */}
-        <section className="px-6 py-8 sm:px-10 sm:py-10">
+<section className="relative px-6 py-8 sm:px-10 sm:py-10">
           <a
             href="/"
             className="mb-8 inline-block text-2xl font-extrabold tracking-tight md:hidden"
@@ -423,81 +466,6 @@ export default function AuthPage() {
               {subtitle}
             </p>
           </div>
-
-          {/* Pilihan peran */}
-          {(mode === "login" || mode === "signup") && (
-            <div className="mb-6">
-              <p className="mb-3 text-sm font-semibold text-slate-700">
-                Saya ingin masuk sebagai
-              </p>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRole("buyer")}
-                  aria-pressed={role === "buyer"}
-                  className={`rounded-xl border p-4 text-left transition ${
-                    role === "buyer"
-                      ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="h-6 w-6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      aria-hidden="true"
-                    >
-                      <path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L21 9H6" />
-                      <circle cx="10" cy="20" r="1" />
-                      <circle cx="18" cy="20" r="1" />
-                    </svg>
-                  </span>
-                  <span className="block text-sm font-bold text-slate-900">
-                    Pencari Produk
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    Jelajahi katalog
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setRole("seller")}
-                  aria-pressed={role === "seller"}
-                  className={`rounded-xl border p-4 text-left transition ${
-                    role === "seller"
-                      ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="h-6 w-6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      aria-hidden="true"
-                    >
-                      <path d="M3 10h18l-2-6H5l-2 6Z" />
-                      <path d="M5 10v10h14V10M9 20v-6h6v6" />
-                      <path d="M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
-                    </svg>
-                  </span>
-                  <span className="block text-sm font-bold text-slate-900">
-                    Penjual
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    Kelola produk
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
@@ -615,6 +583,50 @@ export default function AuthPage() {
               </div>
             )}
 
+            {/* Persetujuan Kebijakan Penjual */}
+{(mode === "login" || mode === "signup") && (
+  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="mb-3">
+      <p className="text-sm font-bold text-slate-800">
+        Kebijakan Penjual VokasiMart
+      </p>
+
+      <button
+        type="button"
+        onClick={() => {
+  setPolicyReadToEnd(false);
+  setShowPolicy(true);
+}}
+        className="mt-1 text-sm font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900"
+      >
+        Baca Kebijakan Penjual
+      </button>
+    </div>
+
+    <label className="flex cursor-pointer items-start gap-3">
+      <input
+  type="checkbox"
+  checked={policyAccepted}
+  onClick={(e) => {
+    if (!policyAccepted) {
+      e.preventDefault();
+      setError(
+        "Silakan baca Kebijakan Penjual VokasiMart sampai selesai dan klik 'Saya Mengerti dan Setuju' terlebih dahulu."
+      );
+    }
+  }}
+  onChange={(e) => setPolicyAccepted(e.target.checked)}
+  className="mt-1 h-4 w-4 shrink-0 accent-blue-700"
+/>
+
+      <span className="text-sm leading-6 text-slate-600">
+        Saya telah membaca dan menyetujui Kebijakan Penjual VokasiMart.
+      </span>
+    </label>
+  </div>
+)}
+
+
             {/* Pesan error */}
             {error && (
               <div
@@ -692,6 +704,87 @@ export default function AuthPage() {
             Dengan melanjutkan, kamu setuju untuk menggunakan VokasiMart
             secara bertanggung jawab.
           </p>
+
+{/* Pop-up Kebijakan Penjual */}
+{showPolicy && (
+  <div
+    className="absolute inset-0 z-30 flex items-center justify-center rounded-3xl bg-slate-900/50 p-4 backdrop-blur-sm"
+    onClick={() => setShowPolicy(false)}
+  >
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="seller-policy-title"
+      className="max-h-[85%] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h3
+            id="seller-policy-title"
+            className="text-xl font-bold text-slate-900"
+          >
+            Kebijakan Penjual VokasiMart
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Baca ketentuan berikut sebelum mulai berjualan.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowPolicy(false)}
+          aria-label="Tutup kebijakan"
+          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div
+  ref={policyContentRef}
+  onScroll={(e) => {
+    const element = e.currentTarget;
+    const reachedBottom =
+      element.scrollTop + element.clientHeight >=
+      element.scrollHeight - 5;
+
+    if (reachedBottom) {
+      setPolicyReadToEnd(true);
+    }
+  }}
+  className="max-h-64 space-y-4 overflow-y-auto pr-2"
+>
+        {sellerPolicy.map((policy) => (
+          <div key={policy.title}>
+            <h4 className="text-sm font-bold text-slate-800">
+              {policy.title}
+            </h4>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              {policy.description}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <button
+  type="button"
+  disabled={!policyReadToEnd}
+  onClick={() => {
+    setPolicyAccepted(true);
+    setShowPolicy(false);
+    setError("");
+  }}
+  className="mt-6 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+>
+  {policyReadToEnd
+    ? "Saya Mengerti dan Setuju"
+    : "Baca sampai bagian akhir"}
+</button>
+    </div>
+  </div>
+)}
+
         </section>
       </div>
     </main>
