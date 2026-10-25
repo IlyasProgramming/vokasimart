@@ -55,9 +55,14 @@ export async function generateMetadata({
   const image =
   data.image_urls?.[0] || data.image_url || undefined;
 
-  const description =
-    data.description?.trim() ||
-    `Lihat ${data.name} di VokasiMart, marketplace mahasiswa Sekolah Vokasi IPB.`;
+  const formattedPrice = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  maximumFractionDigits: 0,
+}).format(data.price);
+
+const description =
+  `Penjual: ${data.seller} · Mulai dari ${formattedPrice}`;
 
   return {
     title: `${data.name} | VokasiMart`,
