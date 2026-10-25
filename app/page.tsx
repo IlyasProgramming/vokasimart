@@ -2524,13 +2524,15 @@ async function handleRestoreProduct(product: Product) {
             </div>
 
             <button
-              type="button"
-              aria-label="Tutup detail"
-              onClick={() => setSelectedProduct(null)}
-              className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-lg hover:bg-gray-200"
-            >
-              ✕
-            </button>
+  type="button"
+  aria-label="Tutup detail"
+  onClick={() => {
+    window.location.href = "/";
+  }}
+  className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-lg hover:bg-gray-200"
+>
+  ✕
+</button>
           </div>
 
           <p className="mt-4 text-2xl font-black text-[#176b45]">
