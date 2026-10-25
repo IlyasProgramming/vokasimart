@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VokasiMart | Marketplace SV IPB",
+  title: "VokasiMart | Marketplace SV IPB University",
   description:
     "VokasiMart, marketplace untuk mahasiswa Sekolah Vokasi IPB University.",
 };

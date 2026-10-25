@@ -272,6 +272,26 @@ const [restoringId, setRestoringId] = useState<string | null>(null);
 
         const [selectedProduct, setSelectedProduct] =
           useState<Product | null>(null);
+          const handleShareProduct = async (product: Product) => {
+  const productUrl = `${window.location.origin}/produk/${product.id}`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: product.name,
+        text: `Lihat ${product.name} di VokasiMart!`,
+        url: productUrl,
+      });
+    } else {
+      await navigator.clipboard.writeText(productUrl);
+      window.alert("Tautan produk berhasil disalin!");
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name !== "AbortError") {
+      window.alert("Gagal membagikan produk. Silakan coba lagi.");
+    }
+  }
+};
         const [editingProduct, setEditingProduct] =
           useState<Product | null>(null);
         // GALERI FOTO PRODUK PEMBELI
@@ -1875,6 +1895,13 @@ async function handleRestoreProduct(product: Product) {
                           >
                             Lihat detail
                           </button>
+                          <button
+  type="button"
+  onClick={() => void handleShareProduct(product)}
+  className="mt-2 w-full rounded-xl border border-gray-200 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+>
+  ↗ Bagikan
+</button>
 
                           {userId && (product.owner_id === userId || isAdmin) && (
     <div className="mt-2 flex gap-2">
