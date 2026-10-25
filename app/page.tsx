@@ -1,14 +1,18 @@
 
       "use client";
 
-      import {
-        useCallback,
-        useEffect,
-        useState,
-        type ChangeEvent,
-        type FormEvent,
-      } from "react";
-      import { supabase } from "@/lib/supabase";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
+
+import { supabase } from "@/lib/supabase";
+
+import { useSearchParams } from "next/navigation";
       
 
       type ProductVariant = {
@@ -243,7 +247,7 @@
           : "Terjadi kesalahan. Silakan coba lagi.";
       }
 
-      export default function Home() {
+      function HomeContent() {
         const [products, setProducts] = useState<Product[]>([]);
         const [loading, setLoading] = useState(true);
         const [errorMessage, setErrorMessage] = useState("");
@@ -272,6 +276,24 @@ const [restoringId, setRestoringId] = useState<string | null>(null);
 
         const [selectedProduct, setSelectedProduct] =
           useState<Product | null>(null);
+          const searchParams = useSearchParams();
+
+
+          useEffect(() => {
+  const productId = searchParams.get("produk");
+
+  if (!productId) return;
+
+  const targetProduct = products.find(
+    (product) => String(product.id) === productId
+  );
+
+  if (targetProduct) {
+    setSelectedProduct(targetProduct);
+  }
+}, [searchParams, products]);
+
+
           const handleShareProduct = async (product: Product) => {
   const productUrl = `${window.location.origin}/produk/${product.id}`;
 
@@ -3323,3 +3345,11 @@ async function handleRestoreProduct(product: Product) {
           </main>
         );
       }
+
+      export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <HomeContent />
+    </Suspense>
+  );
+}

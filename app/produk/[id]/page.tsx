@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import ProductImageGallery from "./ProductImageGallery";
 export const instant = false;
 
 type ProductVariant = {
@@ -53,8 +54,6 @@ export async function generateMetadata({
 
   const image =
   data.image_urls?.[0] || data.image_url || undefined;
-    ? "https://ujvgkurycoybcdmtseff.supabase.co/storage/v1/object/public/product-images/17648218-a69b-4220-96a5-a73043b4c2a9/cookies-compressed.jpg"
-    : data.image_urls?.[0] || data.image_url || undefined;
 
   const description =
     data.description?.trim() ||
@@ -137,37 +136,22 @@ export default async function ProductDetailPage({
           ← Kembali ke VokasiMart
         </Link>
 
-        <article className="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white">
-          {images.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
-              {images.map((url, index) => (
-                <div
-                  key={`${url}-${index}`}
-                  className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl bg-gray-50"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={url}
-                    alt={`${product.name} - foto ${index + 1}`}
-                    className="h-full w-full object-contain"
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex h-48 items-center justify-center bg-gray-100 text-6xl">
-              {product.emoji || "📦"}
-            </div>
-          )}
+      <article className="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+  {images.length > 0 ? (
+    <ProductImageGallery
+      images={images}
+      productName={product.name}
+    />
+  ) : (
+    <div className="flex h-48 items-center justify-center bg-gray-100 text-6xl">
+      {product.emoji || "📦"}
+    </div>
+  )}
 
-          <div className="p-5 sm:p-7">
-            <p className="text-sm text-gray-500">
-              {product.category}
-            </p>
-
-            <h1 className="mt-2 text-2xl font-bold text-gray-900">
-              {product.name}
-            </h1>
+  <div className="p-5 sm:p-7">
+    <p className="text-sm text-gray-500">
+      {product.category}
+    </p>
 
             <p className="mt-3 text-2xl font-bold text-[#176b45]">
               {formatPrice(product.price)}
@@ -199,7 +183,9 @@ export default async function ProductDetailPage({
                       key={`${variant.name}-${index}`}
                       className="flex justify-between gap-3 rounded-lg bg-gray-50 p-3 text-sm"
                     >
-                      <span>{variant.name}</span>
+                      <span className="font-medium text-gray-900">
+  {variant.name}
+</span>
                       <span className="font-semibold text-[#176b45]">
                         {formatPrice(variant.price)}
                       </span>
@@ -209,16 +195,27 @@ export default async function ProductDetailPage({
               </div>
             )}
 
-            {whatsappNumber && (
-              <a
-                href={`https://wa.me/${whatsappNumber}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-6 block rounded-xl bg-[#176b45] px-4 py-3 text-center font-bold text-white hover:bg-[#125638]"
-              >
-                Hubungi Penjual via WhatsApp
-              </a>
-            )}
+            
+
+
+            <div className="mt-6 space-y-3">
+
+              <Link
+  href={`/?produk=${product.id}`}
+  className="block rounded-xl bg-[#176b45] px-4 py-3 text-center font-bold text-white hover:bg-[#125638]"
+>
+  Pesan Sekarang/Lihat Detail Produk
+</Link>
+
+              <Link
+  href="/"
+  className="block rounded-xl border border-[#176b45] px-4 py-3 text-center font-bold text-[#176b45] hover:bg-green-50"
+>
+  Lihat Produk Lainnya
+</Link>
+            </div>
+
+
           </div>
         </article>
       </div>

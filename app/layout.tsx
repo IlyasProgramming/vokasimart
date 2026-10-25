@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://vokasimartsvipb.netlify.app"),
   title: "VokasiMart | Marketplace SV IPB University",
   description:
     "VokasiMart, marketplace untuk mahasiswa Sekolah Vokasi IPB University.",
