@@ -52,7 +52,7 @@ export async function generateMetadata({
   }
 
   const image =
-  id === "c1944936-af74-4cad-99de-51474f44ce15"
+  data.image_urls?.[0] || data.image_url || undefined;
     ? "https://ujvgkurycoybcdmtseff.supabase.co/storage/v1/object/public/product-images/17648218-a69b-4220-96a5-a73043b4c2a9/cookies-compressed.jpg"
     : data.image_urls?.[0] || data.image_url || undefined;
 
