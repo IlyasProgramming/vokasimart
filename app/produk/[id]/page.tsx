@@ -39,11 +39,11 @@ export async function generateMetadata({
   const { id } = await params;
 
   const { data } = await supabase
-    .from("products")
-    .select("name, description, image_url, image_urls")
-    .eq("id", id)
-    .is("deleted_at", null)
-    .maybeSingle();
+  .from("products")
+  .select("name, seller, price, image_url, image_urls")
+  .eq("id", id)
+  .is("deleted_at", null)
+  .maybeSingle();
 
   if (!data) {
     return {
