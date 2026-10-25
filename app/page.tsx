@@ -1240,6 +1240,166 @@ useEffect(() => {
   }
 
   // PULIHKAN PRODUK DARI SAMPAH
+
+ // HAPUS PRODUK DARI SAMPAH SECARA PERMANEN
+
+async function handlePermanentDelete(product: Product) {
+  if (
+    !userId ||
+    (product.owner_id !== userId && !isAdmin)
+  ) {
+    setFormMessage("Kamu tidak memiliki izin menghapus produk ini.");
+    return;
+  }
+
+  if (restoringId || savingProduct || deletingId) return;
+
+  if (!product.deleted_at) {
+    setFormMessage("Produk ini tidak berada di Sampah.");
+    return;
+  }
+
+  if (
+    !window.confirm(
+      `HAPUS PERMANEN "${product.name}"?\n\n` +
+      "Data produk akan dihapus dari database dan foto yang tidak digunakan produk lain akan dibersihkan. " +
+      "Tindakan ini tidak dapat dipulihkan."
+    )
+  ) {
+    return;
+  }
+
+  setDeletingId(product.id);
+  setFormMessage("");
+
+  try {
+    // Ambil URL foto milik produk yang akan dihapus.
+    const targetImageUrls = getProductImages(product);
+
+    // Cari foto yang masih digunakan produk lain.
+    const { data: otherProducts, error: referenceError } =
+      await supabase
+        .from("products")
+        .select("id, image_url, image_urls")
+        .neq("id", product.id);
+
+    if (referenceError) throw referenceError;
+
+    const otherImageUrls = new Set(
+      (otherProducts ?? []).flatMap((item) => [
+        ...(item.image_url ? [item.image_url] : []),
+        ...(Array.isArray(item.image_urls)
+          ? item.image_urls.filter(
+              (url): url is string => typeof url === "string"
+            )
+          : []),
+      ])
+    );
+
+    // Hanya pilih foto yang tidak digunakan produk lain.
+    const removableUrls = targetImageUrls.filter(
+      (url) => !otherImageUrls.has(url)
+    );
+
+    // Ubah URL foto menjadi path Storage.
+    // Path hanya boleh berasal dari folder pemilik produk.
+    const marker =
+      "/storage/v1/object/public/product-images/";
+
+    const removablePaths = [
+      ...new Set(
+        removableUrls.flatMap((url) => {
+          const markerIndex = url.indexOf(marker);
+
+          if (markerIndex === -1) return [];
+
+          try {
+            const path = decodeURIComponent(
+              url.slice(markerIndex + marker.length)
+            );
+
+            if (
+              !product.owner_id ||
+              !path.startsWith(`${product.owner_id}/`)
+            ) {
+              return [];
+            }
+
+            return [path];
+          } catch {
+            return [];
+          }
+        })
+      ),
+    ];
+
+    // Hapus data produk dari database terlebih dahulu.
+    let deleteQuery = supabase
+      .from("products")
+      .delete()
+      .eq("id", product.id)
+      .not("deleted_at", "is", null);
+
+    if (!isAdmin) {
+      deleteQuery = deleteQuery.eq("owner_id", userId);
+    }
+
+    const { data, error } = await deleteQuery.select("id");
+
+    if (error) throw error;
+
+    if (!data?.length) {
+      throw new Error(
+        "Produk tidak terhapus. Periksa izin DELETE RLS di Supabase."
+      );
+    }
+
+    // Hapus produk dari tampilan Sampah.
+    setTrashProducts((current) =>
+      current.filter((item) => item.id !== product.id)
+    );
+
+    // Bersihkan foto yang sudah tidak digunakan.
+    if (removablePaths.length > 0) {
+      const { error: storageError } = await supabase.storage
+        .from("product-images")
+        .remove(removablePaths);
+
+      if (storageError) {
+        console.error(
+          "Produk terhapus, tetapi foto gagal dibersihkan:",
+          storageError
+        );
+
+        setFormMessage(
+          `Produk "${product.name}" sudah terhapus permanen, tetapi sebagian foto gagal dibersihkan dari penyimpanan.`
+        );
+        return;
+      }
+    }
+
+    const skippedCount =
+      targetImageUrls.length - removablePaths.length;
+
+    setFormMessage(
+      skippedCount > 0
+        ? `Produk "${product.name}" berhasil dihapus permanen. Foto yang masih digunakan atau tidak dapat dipastikan path-nya tidak ikut dihapus.`
+        : `Produk "${product.name}" dan foto yang tidak digunakan produk lain berhasil dihapus permanen.`
+    );
+  } catch (error) {
+    console.error("Gagal menghapus produk permanen:", error);
+
+    setFormMessage(
+      `Hapus permanen gagal: ${getErrorMessage(error)}`
+    );
+  } finally {
+    setDeletingId(null);
+  }
+}
+
+
+
+ // PULIHKAN PRODUK DARI SAMPAH
 async function handleRestoreProduct(product: Product) {
   if (
     !userId ||
@@ -1259,10 +1419,7 @@ async function handleRestoreProduct(product: Product) {
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const deletedAt = new Date(product.deleted_at).getTime();
 
-  if (
-    !Number.isFinite(deletedAt) ||
-    deletedAt < cutoff
-  ) {
+  if (!Number.isFinite(deletedAt) || deletedAt < cutoff) {
     setFormMessage(
       "Masa pemulihan produk ini sudah berakhir. Muat ulang daftar Sampah."
     );
@@ -1316,7 +1473,7 @@ async function handleRestoreProduct(product: Product) {
     );
   } catch (error) {
     console.error("Gagal memulihkan produk:", error);
-    
+
     setFormMessage(
       `Produk gagal dipulihkan: ${getErrorMessage(error)}`
     );
@@ -1324,6 +1481,8 @@ async function handleRestoreProduct(product: Product) {
     setRestoringId(null);
   }
 }
+
+
 
         function handleSearch(event: FormEvent<HTMLFormElement>) {
           event.preventDefault();
@@ -1804,20 +1963,39 @@ async function handleRestoreProduct(product: Product) {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => void handleRestoreProduct(product)}
-                disabled={
-                  restoringId !== null ||
-                  deletingId !== null ||
-                  savingProduct
-                }
-                className="w-full shrink-0 rounded-xl bg-[#176b45] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#125536] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              >
-                {restoringId === product.id
-                  ? "Memulihkan..."
-                  : "Pulihkan"}
-              </button>
+              
+<div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+  <button
+    type="button"
+    onClick={() => void handleRestoreProduct(product)}
+    disabled={
+      restoringId !== null ||
+      deletingId !== null ||
+      savingProduct
+    }
+    className="w-full rounded-xl bg-[#176b45] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#125536] disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {restoringId === product.id
+      ? "Memulihkan..."
+      : "Pulihkan"}
+  </button>
+
+  <button
+    type="button"
+    onClick={() => void handlePermanentDelete(product)}
+    disabled={
+      restoringId !== null ||
+      deletingId !== null ||
+      savingProduct
+    }
+    className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {deletingId === product.id
+      ? "Menghapus..."
+      : "Hapus Permanen"}
+  </button>
+</div>
+
             </article>
           );
         })}
