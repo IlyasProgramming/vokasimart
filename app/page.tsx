@@ -13,7 +13,7 @@ import {
 import { supabase } from "@/lib/supabase";
 
 import { useSearchParams } from "next/navigation";
-      
+
 
       type ProductVariant = {
         name: string;
@@ -114,7 +114,7 @@ import { useSearchParams } from "next/navigation";
 
     // Kompatibilitas dengan produk lama.
     return product.image_url ? [product.image_url] : [];
-  } 
+  }
 
       function normalizeWhatsApp(value: string) {
         let number = value.replace(/\D/g, "");
@@ -259,7 +259,14 @@ import { useSearchParams } from "next/navigation";
         const [authLoading, setAuthLoading] = useState(true);
         const [isAdmin, setIsAdmin] = useState(false);
         const [isSeller, setIsSeller] = useState(false);
-        const [loggingOut, setLoggingOut] = useState(false);
+const [loggingOut, setLoggingOut] = useState(false);
+
+// INFORMASI KUOTA DAN LANGGANAN SELLER
+const [activeProducts, setActiveProducts] = useState(0);
+const [extraProductSlots, setExtraProductSlots] = useState(0);
+const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
+const [entitlementLoading, setEntitlementLoading] = useState(false);
+const [currentTime, setCurrentTime] = useState(0);
 
         const [searchQuery, setSearchQuery] = useState("");
         const [selectedCategory, setSelectedCategory] = useState("Semua");
@@ -318,7 +325,7 @@ const [restoringId, setRestoringId] = useState<string | null>(null);
           useState<Product | null>(null);
         // GALERI FOTO PRODUK PEMBELI
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [showImageFullscreen, setShowImageFullscreen] = useState(false);  
+  const [showImageFullscreen, setShowImageFullscreen] = useState(false);
 
         // FORM PEMESANAN PEMBELI
         const [buyerName, setBuyerName] = useState("");
@@ -425,8 +432,13 @@ const [restoringId, setRestoringId] = useState<string | null>(null);
         if (active) {
           setIsAdmin(data === true);
         }
-      } catch (error) {
-        console.error("Gagal memeriksa peran admin:", error);
+            } catch (error) {
+        console.error("Gagal memeriksa peran admin:", {
+          message: error instanceof Error ? error.message : String(error),
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+          code: (error as any)?.code,
+        });
 
         if (active) {
           setIsAdmin(false);
@@ -534,6 +546,63 @@ const fetchMyCatalog = useCallback(async () => {
   }
 }, [userId, isSeller]);
 
+// MENGAMBIL DATA KUOTA DAN LANGGANAN SELLER
+const fetchSellerEntitlement = useCallback(async () => {
+  if (!userId || !isSeller) {
+    setActiveProducts(0);
+    setExtraProductSlots(0);
+    setAccessExpiresAt(null);
+    return;
+  }
+
+  setEntitlementLoading(true);
+
+  try {
+    const [entitlementResult, productCountResult] = await Promise.all([
+      supabase
+        .from("seller_entitlements")
+        .select("extra_product_slots, access_expires_at")
+        .eq("seller_id", userId)
+        .maybeSingle(),
+
+      supabase
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", userId)
+        .is("deleted_at", null),
+    ]);
+
+    if (entitlementResult.error) {
+      throw entitlementResult.error;
+    }
+
+    if (productCountResult.error) {
+      throw productCountResult.error;
+    }
+
+    setExtraProductSlots(
+      entitlementResult.data?.extra_product_slots ?? 0
+    );
+
+    setAccessExpiresAt(
+      entitlementResult.data?.access_expires_at ?? null
+    );
+
+    setActiveProducts(productCountResult.count ?? 0);
+
+  } catch (error) {
+    console.error("Gagal mengambil entitlement seller:", error);
+
+    setActiveProducts(0);
+    setExtraProductSlots(0);
+    setAccessExpiresAt(null);
+
+  } finally {
+    setEntitlementLoading(false);
+  }
+}, [userId, isSeller]);
+
+
         const fetchTrashProducts = useCallback(async () => {
   if (!userId) {
     setTrashProducts([]);
@@ -580,6 +649,24 @@ useEffect(() => {
     void fetchTrashProducts();
   }
 }, [showTrash, fetchTrashProducts]);
+
+
+// MEMUAT DATA KUOTA DAN LANGGANAN SELLER
+useEffect(() => {
+  void fetchSellerEntitlement();
+}, [fetchSellerEntitlement]);
+// TIMER MUNDUR MASA AKTIF LANGGANAN
+useEffect(() => {
+  setCurrentTime(Date.now());
+
+  const interval = window.setInterval(() => {
+    setCurrentTime(Date.now());
+  }, 1000);
+
+  return () => window.clearInterval(interval);
+}, []);
+
+
 
         // MEMUAT KATALOG SESUAI HALAMAN YANG DIBUKA
 useEffect(() => {
@@ -902,7 +989,7 @@ useEffect(() => {
 
     input.value = "";
   }
-        
+
 
         // TAMBAH DAN EDIT PRODUK
         async function handleAddProduct(event: FormEvent<HTMLFormElement>) {
@@ -930,6 +1017,18 @@ useEffect(() => {
                 "Sesi Masuk tidak ditemukan. Silakan Masuk kembali."
               );
             }
+
+const { data: databaseAuthUid, error: authUidError } =
+  await supabase.rpc("get_current_auth_uid");
+
+if (authUidError) throw authUidError;
+
+console.log("[VokasiMart Identity Audit]", {
+  userId: user.id,
+  authUid: databaseAuthUid,
+  isMatch: user.id === databaseAuthUid,
+});
+
 
             if (
     editingProduct &&
@@ -1089,14 +1188,22 @@ useEffect(() => {
       .from("products")
       .insert(productData);
 
-    if (error) throw error;
+    if (error) {
+  if (error.message.includes("Kuota produk penuh")) {
+    throw new Error(
+      "Kuota produk Anda sudah penuh. Hapus produk yang tidak digunakan atau hubungi admin untuk mendapatkan tambahan kuota."
+    );
   }
-    
+
+  throw error;
+}
+  }
+
 
   // Database berhasil disimpan.
   // Jangan sampai foto yang sudah digunakan ikut terhapus
   // jika proses berikutnya mengalami masalah.
-  uploadedPaths.length = 0;  
+  uploadedPaths.length = 0;
 
             if (editingProduct) {
     const retainedUrls = new Set(allImageUrls);
@@ -1551,14 +1658,14 @@ async function handleRestoreProduct(product: Product) {
             window.alert("Periksa kembali detail pesananmu.");
             return false;
           }
-          
+
           if (
     selectedProduct.category === "Jasa" &&
     !serviceDeadline.trim()
   ) {
     window.alert("Isi tenggat waktu penyelesaian jasa terlebih dahulu.");
     return false;
-  }  
+  }
 
           return true;
         }
@@ -1603,17 +1710,42 @@ async function handleRestoreProduct(product: Product) {
 </div>
 
                 <nav className="hidden items-center gap-7 text-sm font-medium text-gray-600 md:flex">
-                  <a href="#produk" className="hover:text-[#176b45]">
-                    Jelajahi
-                  </a>
-                  <a href="#kategori" className="hover:text-[#176b45]">
-                    Kategori
-                  </a>
-                  <a href="#jual" className="hover:text-[#176b45]">
-                    Jadi Penjual
-                  </a>
-                </nav>
+  <a href="#produk" className="hover:text-[#176b45]">
+    Jelajahi
+  </a>
+  <a href="#kategori" className="hover:text-[#176b45]">
+    Kategori
+  </a>
+  <a href="#jual" className="hover:text-[#176b45]">
+    Jadi Penjual
+  </a>
 
+  {isAdmin && (
+    <a
+      href="/admin/langganan"
+      className="inline-flex items-center gap-2 font-semibold text-[#176b45] transition hover:text-[#105638]"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="17"
+        height="17"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M2 10h20" />
+      </svg>
+      Langganan
+    </a>
+  )}
+
+
+</nav>
                 <div className="flex items-center gap-2">
       {authLoading ? (
         <span className="text-xs text-gray-500 sm:text-sm">
@@ -1630,6 +1762,15 @@ async function handleRestoreProduct(product: Product) {
             </p>
           </div>
 
+          {!isAdmin && isSeller && (
+            <a
+              href="/aktivasi"
+              className="rounded-xl bg-[#176b45] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#105638]"
+            >
+              Aktivasi Langganan
+            </a>
+          )}
+
           <button
             type="button"
             onClick={handleLogout}
@@ -1640,7 +1781,7 @@ async function handleRestoreProduct(product: Product) {
           </button>
         </>
       ) : (
-        
+
 <a
   href="/auth?role=seller"
   className="rounded-xl bg-[#176b45] px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-[#105638] sm:px-4"
@@ -1739,7 +1880,7 @@ async function handleRestoreProduct(product: Product) {
                 </div>
               </div>
             </section>
-                  
+
             {/* KATEGORI */}
             <section
               id="kategori"
@@ -1855,7 +1996,104 @@ async function handleRestoreProduct(product: Product) {
   </div>
 </div>
 
-              {formMessage && !showAddProduct && (
+{/* INFORMASI KUOTA DAN LANGGANAN SELLER */}
+{showMyCatalog && userId && isSeller && (
+  <section className="mt-6 rounded-2xl border border-[#dcebe0] bg-white p-5 shadow-sm sm:p-6">
+    <div>
+      <h3 className="text-lg font-black text-gray-900">
+        Informasi Kuota & Langganan
+      </h3>
+
+      <p className="mt-1 text-sm text-gray-500">
+        Pantau penggunaan kuota dan masa aktif akun penjual Anda.
+      </p>
+    </div>
+
+    <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="rounded-xl bg-[#f0f7f1] p-4">
+        <p className="text-sm text-gray-600">Produk Aktif</p>
+        <p className="mt-1 text-2xl font-black text-[#176b45]">
+          {entitlementLoading ? "..." : activeProducts}
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-[#f0f7f1] p-4">
+        <p className="text-sm text-gray-600">Kuota Tersedia</p>
+        <p className="mt-1 text-2xl font-black text-[#176b45]">
+          {entitlementLoading
+            ? "..."
+            : Math.max(0, 2 + extraProductSlots - activeProducts)}
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-[#f0f7f1] p-4">
+        <p className="text-sm text-gray-600">Kuota Tambahan</p>
+        <p className="mt-1 text-2xl font-black text-[#176b45]">
+          {entitlementLoading ? "..." : extraProductSlots}
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-5 border-t border-gray-100 pt-4">
+      <p className="text-sm text-gray-600">
+        Kuota gratis: <strong>2 produk</strong>
+      </p>
+
+      <p className="mt-2 text-sm text-gray-600">
+        Status langganan:{" "}
+        <strong>
+          {entitlementLoading
+            ? "Memuat..."
+            : accessExpiresAt
+              ? new Date(accessExpiresAt).getTime() > (currentTime || Date.now())
+                ? "Aktif"
+                : "Berakhir"
+              : "Belum berlangganan"}
+        </strong>
+      </p>
+
+      <p className="mt-2 text-sm text-gray-600">
+        Masa berlaku:{" "}
+        <strong>
+          {entitlementLoading
+            ? "Memuat..."
+            : accessExpiresAt
+              ? new Date(accessExpiresAt).toLocaleDateString("id-ID", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })
+              : "Belum ada langganan"}
+        </strong>
+      </p>
+      <p className="mt-2 text-sm text-gray-600">
+        Sisa masa aktif:{" "}
+        <strong className="text-[#176b45]">
+          {entitlementLoading || currentTime === 0
+            ? "Memuat..."
+            : accessExpiresAt
+              ? (() => {
+                  const remaining = Math.max(
+                    0,
+                    new Date(accessExpiresAt).getTime() - currentTime
+                  );
+                  const days = Math.floor(remaining / 86400000);
+                  const hours = Math.floor((remaining % 86400000) / 3600000);
+                  const minutes = Math.floor((remaining % 3600000) / 60000);
+                  const seconds = Math.floor((remaining % 60000) / 1000);
+
+                  return remaining > 0
+                    ? `${days} hari ${hours} jam ${minutes} menit ${seconds} detik`
+                    : "Langganan telah berakhir";
+                })()
+              : "Belum ada langganan"}
+        </strong>
+      </p>
+    </div>
+  </section>
+)}
+
+{formMessage && !showAddProduct && (
                 <p
                   role="status"
                   className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800"
@@ -1957,13 +2195,35 @@ async function handleRestoreProduct(product: Product) {
                       : "Tanggal tidak tersedia"}
                   </p>
 
+                  <p className="mt-1 text-xs font-semibold text-[#b45309]">
+                    {currentTime === 0
+                      ? "Memuat timer..."
+                      : product.deleted_at
+                        ? (() => {
+                            const deletedAt = new Date(product.deleted_at).getTime();
+                            if (!Number.isFinite(deletedAt)) return "Tanggal tidak valid";
+
+                            const deadline = deletedAt + 30 * 24 * 60 * 60 * 1000;
+                            const remaining = Math.max(0, deadline - currentTime);
+
+                            if (remaining <= 0) return "Masa pemulihan berakhir";
+
+                            const days = Math.floor(remaining / 86400000);
+                            const hours = Math.floor((remaining % 86400000) / 3600000);
+                            const minutes = Math.floor((remaining % 3600000) / 60000);
+                            const seconds = Math.floor((remaining % 60000) / 1000);
+
+                            return `Sisa pemulihan: ${days} hari ${hours} jam ${minutes} menit ${seconds} detik`;
+                          })()
+                        : "Tanggal tidak tersedia"}
+                  </p>
                   <p className="text-xs text-gray-500">
                     {images.length} foto tersimpan
                   </p>
                 </div>
               </div>
 
-              
+
 <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
   <button
     type="button"
@@ -2155,7 +2415,7 @@ async function handleRestoreProduct(product: Product) {
   </button>
 )}
 
-  
+
                   </div>
                 )}
               </div>
@@ -2179,6 +2439,23 @@ async function handleRestoreProduct(product: Product) {
         ? `Kamu Masuk sebagai ${userEmail}. Tambahkan produk untuk ditampilkan.`
         : "Punya usaha? Login atau buat akun penjual untuk memperkenalkan produkmu di VokasiMart."}
     </p>
+
+        {userId && isSeller && (
+  <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#c9dfcd] bg-white px-4 py-2.5">
+    <span className="text-[#176b45]">📦</span>
+    <span className="text-sm font-semibold text-gray-700">
+      {entitlementLoading
+        ? "Memuat kuota..."
+        : `Sisa kuota: ${Math.max(
+            0,
+            2 + extraProductSlots - activeProducts
+          )} produk`}
+    </span>
+  </div>
+)}
+
+
+
                 </div>
 
                 <button
@@ -2325,7 +2602,7 @@ async function handleRestoreProduct(product: Product) {
                       </div>
                     </div>
 
-                    
+
                     <div>
                       <label
                         htmlFor="productCategory"
@@ -2397,7 +2674,7 @@ async function handleRestoreProduct(product: Product) {
       Foto produk
     </label>
 
-    
+
   <input
     key={imageInputKey}
     id="productImage"
@@ -2576,7 +2853,7 @@ async function handleRestoreProduct(product: Product) {
                   className="my-auto max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  
+
       <div className="grid items-start gap-6 p-5 sm:p-6 md:grid-cols-2">
         {/* KOLOM FOTO */}
         {/* KOLOM FOTO */}
@@ -3184,12 +3461,12 @@ async function handleRestoreProduct(product: Product) {
                         </button>
                       </div>
                     )}
-                  
+
                 </section>
               </div>
             )}
 
-            
+
             {/* FULLSCREEN FOTO PRODUK */}
             {showImageFullscreen &&
               selectedProduct &&
@@ -3272,7 +3549,7 @@ async function handleRestoreProduct(product: Product) {
               )}
 
 
-            
+
             {/* FOOTER */}
             <footer className="border-t border-gray-200 bg-white">
               <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-7 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between lg:px-8">

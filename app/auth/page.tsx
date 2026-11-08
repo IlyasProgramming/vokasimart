@@ -84,6 +84,9 @@ const policyContentRef = useRef<HTMLDivElement>(null);
     e.preventDefault();
 
     if (busy) return;
+
+    const normalizedEmail = email.trim().toLowerCase();
+
     
     if (
   (mode === "login" || mode === "signup") &&
@@ -99,7 +102,7 @@ const policyContentRef = useRef<HTMLDivElement>(null);
     try {
       if (mode === "forgot") {
         const { error } = await supabase.auth.resetPasswordForEmail(
-          email.trim(),
+          normalizedEmail,
           {
             redirectTo: `${window.location.origin}/auth`,
           }
@@ -129,7 +132,7 @@ const policyContentRef = useRef<HTMLDivElement>(null);
 
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: normalizedEmail,
           password,
           options: {
             data: {
@@ -156,7 +159,7 @@ const policyContentRef = useRef<HTMLDivElement>(null);
       }
 
       const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: normalizedEmail,
         password,
       });
 
@@ -403,12 +406,12 @@ const subtitle =
               <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/90">
                 {role === "buyer" ? (
                   <>
-                    <span>🛍️</span>
+                    <span>ðŸ›ï¸</span>
                     <span>Jelajahi produk kampus</span>
                   </>
                 ) : (
                   <>
-                    <span>🚀</span>
+                    <span>ðŸš€</span>
                     <span>Kembangkan usaha mahasiswa</span>
                   </>
                 )}
@@ -442,7 +445,7 @@ const subtitle =
           <div className="relative z-10 flex items-center justify-between gap-3 text-sm text-white/70">
             <span>Pasar digital warga vokasi.</span>
             <span className="text-lg" aria-hidden="true">
-              {role === "buyer" ? "💚" : "🧡"}
+              {role === "buyer" ? "ðŸ’š" : "ðŸ§¡"}
             </span>
           </div>
         </section>
@@ -737,7 +740,7 @@ const subtitle =
           aria-label="Tutup kebijakan"
           className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
         >
-          ✕
+          âœ•
         </button>
       </div>
 
